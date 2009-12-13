@@ -1,0 +1,684 @@
+=============
+Plex Tutorial
+=============
+
+Using Plex
+==========
+
+There are two basic steps to creating and using a Plex scanner :
+
+1. Create a Lexicon object which defines the tokens you want to recognise, and
+   what you want to do when they are recognised.
+2. Create a Scanner object, which associates a Lexicon with a stream of
+   characters and enables you to read tokens.
+
+In the following sections, we'll look at these steps in more detail.
+
+
+Specifying a Lexicon
+====================
+
+A Plex scanner is specified by creating a Lexicon object. The Lexicon
+constructor takes a list of 2-element tuples, each of which contains a pattern
+and an action.  Here is a simple example :
+
+::
+
+    #
+    #   Example 1
+    #
+
+    from plex import *
+
+    lexicon = Lexicon([
+        (Str("Python"),      "my_favourite_language"),
+        (Str("Perl"),        "the_other_language"),
+        (Str("rocks"),       "is_excellent"),
+        (Str("sucks"),       "is_differently_good"),
+        (Rep1(Any(" \t\n")), IGNORE)
+    ])
+
+
+The expression Str(s) creates a pattern which matches the literal string s.
+Any(s) matches any single character from the string s, and Rep1(p) matches one
+or more repetitions of the pattern p.
+
+Associated with each pattern is an action to be performed when that pattern is
+recognised. The simplest form of action is just a value to be returned. There
+are also some special actions, such as IGNORE, which causes the text which
+matched the pattern to be ignored. So the last item above means that any
+sequence of one or more blanks, tabs or newlines is to be ignored.
+
+
+Creating and using a Scanner
+============================
+
+Scanning is performed by a Scanner object. When you create a Scanner, you
+specify the Lexicon that is to be used, and an input stream, which should be a
+file-like object.
+
+To read tokens from the input stream, you call the read() method of the Scanner.
+Each time read() is called, it returns a tuple
+
+::
+
+    (value, text)
+
+where value is the value returned by the token's action, and text is the text
+from the input stream that matched the token.
+
+We can test out the Lexicon we defined earlier like this:
+
+::
+
+    #
+    #   Example 2
+    #
+
+    filename = "my_file.txt"
+    f = open(filename, "r")
+    scanner = Scanner(lexicon, f, filename)
+    while 1:
+        token = scanner.read()
+        print token
+        if token[0] is None:
+            break
+
+If we feed it the following input:
+
+::
+
+    Python rocks
+
+we get the following sequence of tuples returned by successive read() calls:
+
+::
+
+    ('my_favourite_language', 'Python')
+    ('is_excellent', 'rocks')
+    (None, '')
+
+Note that a token with a value of None is returned when the scanner hits the end of the input.
+
+
+Getting the scanner position
+============================
+
+Scanners have a position() method which returns the position of the last token
+read using read(). It returns a tuple :
+
+::
+
+    (filename, line_number, char_number)
+
+The line_number is 1-based and char_number is the 0-based position within the
+line. The filename is whatever string you supplied as the filename parameter, if
+any, when you created the Scanner. The filename parameter to the Scanner is
+optional, and is purely for your convenience -- its only use is to be returned
+by position().
+
+
+More patterns and actions
+=========================
+
+In this section, we'll look at some more pattern constructors, and some more
+things that can be specified as the action associated with a token.
+Here is a Lexicon definition for a simple programming language.
+
+::
+
+    #
+    #   Example 3
+    #
+
+    letter = Range("AZaz")
+    digit = Range("09")
+    name = letter + Rep(letter | digit)
+    number = Rep1(digit)
+    space = Any(" \t\n")
+    comment = Str("{") + Rep(AnyBut("}")) + Str("}")
+
+    resword = Str("if", "then", "else", "end")
+
+    lex = Lexicon([
+        (name,            'ident'),
+        (number,          'int'),
+        (resword,         TEXT),
+        (Any("+-*/=<>"),  TEXT),
+        (space | comment, IGNORE)
+    ])
+
+This example introduces some more features:
+
+* Range() takes a string containing pairs of characters. It matches any single
+  character which lies within one of the ranges defined by a pair.
+* Rep() matches zero or more repetitions of a pattern (as opposed to Rep1(),
+  which matches one or more).
+
+* AnyBut(s) matches any single character (including a newline) which is not in
+  the string s.
+
+* Patterns can be combined using the operators '+' and '|'. The pattern p1 + p2
+  matches p1 followed by p2, and p1 | p2 matches either p1or p2.
+
+* Str() can take multiple strings as arguments, in which case it matches any one
+  of them. Str(s1, s2, s3...) is equivalent to Str(s1) | Str(s2) | Str(s3) | ...
+
+* The TEXT special action causes the matched text to be returned as the value of
+  the token. Here it is used to arrange for the reserved words and operators to
+  all have unique token values, without having to explicitly list them all as
+  separate tokens.
+
+Incidentally, this example also illustrates some of the advantages of using a
+constructor-function approach to building regular expressions as opposed to the
+traditional character-string syntax. Patterns can be broken down into readable
+chunks and the parts commented, and general Python coding techniques can be
+brought to bear much more easily.
+
+
+Case-insensitive matching
+=========================
+
+The pattern constructor NoCase() takes a pattern and turns it into another
+pattern which matches the same strings except that upper and lower case letters
+are treated as equivalent. For example, if you wanted the language of Example 3
+to be case-insensitive,  you could write
+
+::
+
+    resword = NoCase(Str("if", "then", "else", "end"))
+
+If you wanted, you could also write
+
+::
+
+    letter = NoCase(Range("AZ"))
+
+However, note that the scanned text returned when an identifier is matched will
+still be as it was in the input file, so you'll have to do case-conversion on it
+yourself.
+
+There is also an inverse operation Case(). Whether a pattern is matched
+case-sensitively or case-insensitively is determined by the closest enclosing
+NoCase() or Case().  So,  the pattern
+
+::
+
+    NoCase(Str("Mary") + Case(Str("had a") + NoCase(Str("little")) + Str("lambda")))
+
+will match the words "Mary" and "little" case-insensitively,  and "had", "a" and
+"lambda" case-sensitively.
+
+
+Using action procedures
+=======================
+
+The action associated with a token can be an arbitrary Python function, which
+allows effects to be achieved that would otherwise be outside the scope of a
+simple finite-state machine.
+
+Here is an example which uses action procedures to recognise Modula-style nested
+comments by keeping track of the nesting depth.  It uses some of the pattern
+definitions from the last example.
+
+::
+
+    #
+    #       Example 4
+    #
+
+    def begin_comment(scanner, text):
+        scanner.nesting_level = scanner.nesting_level + 1
+
+    def end_comment(scanner, text):
+        scanner.nesting_level = scanner.nesting_level - 1
+
+    def maybe_a_name(scanner, text):
+        if scanner.nesting_level == 0:
+            return 'ident'
+
+    lex = Lexicon([
+        (Str("(*"), begin_comment),
+        (Str("*)"), end_comment),
+        (name,      maybe_a_name),
+        (space,     IGNORE)
+    ])
+
+    scn = Scanner(lex,...)
+    scn.nesting_level = 0
+
+When an action procedure is called, it is passed the scanner which has just
+recognised the token, and the text which was matched. If the procedure returns
+anything other than None, it is returned as the value of the token. If it
+returns None, scanning continues as if the IGNORE action hadbeen specified.
+
+Here, the procedures begin_comment() and end_comment() maintain a count of the
+comment nesting level in an extra instance attribute attached to the Scanner.
+When something that might be an identifier is recognised, the maybe_a_name()
+procedure checks whether it's inside a comment. If so, 'ident' is returned as
+the value of the token; otherwise the default value of None is returned, and
+scanning continues.
+
+At this point you're probably thinking that the last bit is rather clumsy, and
+you're right. If we wanted to recognise more tokens than just identifiers, we'd
+have to have maybe_an_operator(), maybe_a_number(), maybe_a_keyword(), etc. --
+rather unwieldy! In the next example, we'll see a much better way.
+
+
+Scanner States
+==============
+
+At any given time, a Scanner can be in one of a number of states.Each state has
+a set of tokens associated with it, and only tokens belonging to the current
+state are recognised. There is always at least one state, the default state,
+whose name is the empty string. In the scanners we've seen so far, all the
+tokens have been associated with the default state. This section shows how to
+create additional states and associated tokens with them.
+
+Here is an example which uses scanner states to skip over comments. For
+simplicity, this one only handles non-nested comments; we'll extend it to nested
+comments in a later example.
+
+::
+
+    #
+    #   Example 5
+    #
+
+    lex = Lexicon([
+        (name,            'ident'),
+        (number,          'int'),
+        (space,           IGNORE),
+        (Str("(*"),       Begin('comment')),
+        State('comment', [
+            (Str("*)"), Begin('')),
+            (AnyChar,   IGNORE)
+        ])
+    ])
+
+The State() constructor introduces a new scanner state. It is used in place of a
+token in the token list, and takes two arguments: the nameof the state, and
+another list of tokens. (In case you're wondering, that second token list can
+only contain tokens, not States. States can't be nested.)
+
+The way it works is this. Initially, a newly-created Scanner is in the default
+state, called ''. In this state, only the first four tokens will match. When the
+beginning of a comment is recognised, the action Begin('comment') is invoked.
+This is another special action, whose effect is to change the current state of
+the scanner. Now the scanner is in the state called 'comment', and will only
+recognise the two tokens belonging to that state. Their effect is to ignore
+everything up to the next end-comment marker, whereupon the default state is
+re-entered and normal scanning continues. (AnyChar, as its name suggests,
+matches any single character.)
+
+Note that the patterns which recognise the insides of the comment rely on the
+longest match feature of Plex: if more than one token matches at a given input
+position, and they match strings of different lengths, the longest one takes
+precedence.
+
+The scanner-state technique makes recognising comments rather easy. Since we're
+not trying to handle nesting, we could have recognised the whole comment using a
+single pattern, but it would be a rather tricky and complicated one -- something
+like Str("(*") + Rep(AnyBut("*") | (Str("*") + AnyBut(")"))) + Str("*)"). By
+using a separate state for comments, we avoid any such nightmare.
+
+There is another advantage as well. When Plex is scanning a token, it has to
+buffer up all the characters read until the whole token is recognised, in case
+you're interested in the matched text. In the case of a comment, you're not, but
+Plex has no way of knowing that, so if you try to recognise the whole comment as
+a single pattern, Plex happily buffers it all up before throwing it away. In
+contrast, the above example skips over the comment while never having to keep
+more than 2 characters. If someone feeds you a comment a few megabytes long one
+day, you might be thankful for that.
+
+Here's an extended version which handles the full range of Pascal-style
+comments :
+
+::
+
+    #
+    #   Example 6
+    #
+
+    lex = Lexicon([
+        (name,            'ident'),
+        (number,          'int'),
+        (space,           IGNORE),
+        (Str("(*"),       Begin('comment1')),
+        (Str("{"),        Begin('comment2')),
+        State('comment1', [
+            (Str("*)"), Begin('')),
+            (AnyChar,   IGNORE)
+        ]),
+        State('comment2', [
+            (Str("}"),  Begin('')),
+            (AnyChar,   IGNORE)
+        ])
+    ])
+
+
+The comment2 state in this example relies on the priority rule: if two tokens
+match strings of the samelength, the one that occurs first in the token list
+takes precedence.
+
+Now let's extend Example 5 to handle nested comments. While we're at it, we'll
+illustrate a technique for packaging up action procedures with a scanner in a
+neater way than we did in Example 4.
+
+::
+
+    #
+    #   Example 7
+    #
+
+    class MyScanner(Scanner):
+
+        def begin_comment(self, text):
+            if self.nesting_level == 0:
+                self.begin('comment')
+            self.nesting_level = self.nesting_level + 1
+
+        def end_comment(self, text):
+            self.nesting_level = self.nesting_level - 1
+            if self.nesting_level == 0:
+                self.begin('')
+
+        lexicon = Lexicon([
+            (name,          'ident'),
+            (number,        'int'),
+            (space,         IGNORE),
+            (Str("(*"),     begin_comment),
+            State('comment', [
+                (Str("(*"), begin_comment),
+                (Str("*)"), end_comment),
+                (AnyChar,   IGNORE)
+            ])
+        ])
+
+        def __init__(self, file, name):
+            Scanner.__init__(self, self.lexicon, file, name)
+            self.nesting_level = 0
+
+The trick here is that we construct the Lexicon inside the class scope of
+MyScanner, and plug in methods of MyScanner as action procedures. The Lexicon
+becomes a class attribute which is passed on to the Scanner constructor by the
+MyScanner constructor. The result is a completely self-contained subclass of
+Scanner that comes with its own Lexicon and knows how to initialise itself. To
+use it, all we need to do is
+
+::
+
+    scanner = MyScanner(file, filename)
+
+and away we go.
+
+Note the use of the begin() method of the Scanner in the action procedures. This
+has the same effect as the Begin() special action.
+
+
+Matching line beginnings and endings
+====================================
+
+Plex has three special pattern primitives, Bol, Eol and Eof, which match the
+beginning of a line, the end of a line and the end of the file, respectively.
+For example, if you were processing mail headers, you might use patterns such as
+
+::
+
+    from    = Bol + "From:"
+    to      = Bol + "To:"
+    subject = Bol + "Subject:"
+
+
+These patterns work by matching imaginary characters that Plex inserts into the
+input stream. For example, given an input file consisting of
+
+::
+
+    H e l l o \n w o r l d
+
+Plex sees it as
+
+::
+
+    <bol> H e l l o <eol> \n <bol> w o r l d <eol> <eof>
+
+These imaginary characters are never matched by any of the ordinary patterns,
+but they are skipped over if necessary in order to get to something which does
+match. So if you're not interested in them, you can write your patterns as
+though they didn't exist and everything will work as you expect.
+
+Something to keep in mind is that the Bol, Eol and Eof patterns will only match
+once at any given input position, so, for instance, a pattern such as Bol + Bol
++ Str("Hello") will never match. It would obviously be silly to write such a
+pattern directly, but it could arise accidentally when combining separately
+defined patterns if you're not careful.
+
+A more subtle problem can occur if you have two tokens in your Lexicon such as
+
+::
+
+    (Str("Hello") + Eol,   'hello'),
+    (Eol + Opt(Str("\n")), 'eol')
+
+
+where the intention of the second token is to match the end of any line, even if
+the file does not end with a newline. The problem is that when the first token
+matches it absorbs the <eol> marker, so the second token fails to match. One way
+to avoid the problem in this case is to write the second pattern as Str("\n") |
+Eof.
+
+
+Scanning indented languages
+===========================
+
+The next example shows how you can build a scanner for an indentation-sensitive
+language such as Python. We'll begin by declaring a new Scanner class and some
+action methods for keeping track of brackets and indentation.
+
+::
+
+    #
+    #   Example - Python scanner
+    #
+
+    class PythonScanner(Scanner):
+
+We need to keep track of brackets, because indentation and newlines should be
+ignored inside brackets. We'll just treat all brackets the same and leave the
+parser to check that they match up properly.
+
+::
+
+    def open_bracket_action(self, text):
+        self.bracket_nesting_level = self.bracket_nesting_level + 1
+        return text
+
+    def close_bracket_action(self, text):
+        self.bracket_nesting_level = self.bracket_nesting_level - 1
+        return text
+
+
+We'll keep a stack of indentation levels as a list of integers. The top item on
+this stack will be at the end of the list.
+
+::
+
+    def current_level(self):
+        return self.indentation_stack[-1]
+
+We'll be using a separate scanner state to deal with indentation, because this
+will make it easier to keep track of the various conditions under which leading
+whitespace should be regarded as indentation. The trigger for entering this
+state will be encountering a newline, so we'll define an action for that.
+
+::
+
+    def newline_action(self, text):
+        if self.bracket_nesting_level == 0:
+            self.begin('indent')
+            return 'newline'
+
+
+Note that we only recognise a newline as terminating a statement if we're not
+inside brackets, otherwise we ignore it.
+
+Here comes the action we'll call when we recognise some leading space that
+should be treated as indentation. For simplicity, we'll assume that the file is
+indented using all tabs or all spaces, so that the indentation level is just the
+length of the string. The version in the examples directory contains some code
+to check these assumptions; we omit it here for clarity. Note that we don't
+bother checking whether we're inside brackets, because the 'indent' state will
+never be entered in that case.
+
+When we've finished, we change the scanner back to the default state.
+
+::
+
+    def indentation_action(self, text):
+        current_level = self.current_level()
+        new_level = len(text)
+        if new_level > current_level:
+            self.indent_to(new_level)
+        elif new_level < current_level:
+            self.dedent_to(new_level)
+        self.begin('')
+
+    def indent_to(self, new_level):
+        self.indentation_stack.append(new_level)
+        self.produce('INDENT', '')
+
+    def dedent_to(self, new_level):
+        while new_level < self.current_level():
+            self.indentation_stack.pop()
+            self.produce('DEDENT', '')
+
+Calling the produce() method of the Scanner object has the same effect as
+returning a value from the action procedure. You can also pass an optional
+second argument, which is substituted for the matched text in the returned
+tuple. We're not interested in the matched text here (it's just the indentation
+string) so we pass an empty string as the second argument.
+
+The reason we're using produce() instead of simply returning a value is that it
+can be called more than once before returning from the action procedure, and the
+values get queued up and returned one at a time by subsequent calls to read().
+This behaviour is crucial for when we dedent more than one level at a time,
+because we have to generate multiple "dedent" tokens from a single pattern
+match.
+
+The version in the examples directory also contains another test here to make
+sure that the dedent matches some previous indent level.
+
+One more thing. When we get to the end of the file, we need to put out enough
+"dedent" tokens to get back to ground zero. To do this, we'll override the eof()
+method of the Scanner. This method is called when the scanner reaches the end of
+the file, just before returning the end-of-file token.
+
+::
+
+    def eof(self):
+        self.dedent_to(0)
+
+
+Okay, that's the end of the action procedures. Now we need a bunch of patterns,
+most of which are straightforward but tedious -- see the examples directory if
+you're interested. We'll just look at the ones related to whitespace handling.
+
+::
+
+    indentation = Rep(Str(" ")) | Rep(Str("\t"))
+
+
+This pattern matches an indentation string. The fact that it has to occur at the
+beginning of a line will be taken care of by the scanner states.
+
+::
+
+    lineterm = Str("\n") | Eof
+
+
+This pattern matches the end of a line. It's written this way instead of just
+Str("\n") because we want it to match even at the end of the last line of a file
+that doesn't end with a newline.
+
+::
+
+    escaped_newline = Str("\\\n")
+
+
+We'll use this one to soak up a newline preceded by a backslash before lineterm
+gets hold of it.
+
+::
+
+    comment = Str("#") + Rep(AnyBut("\n"))
+
+
+This pattern matches everything from a comment character up to, but not
+including, the end of the line.
+
+::
+
+    blank_line = indentation + Opt(comment) + lineterm
+
+
+We'll use this pattern to skip over lines which are completely blank or contain
+only a comment, so that they won't generate spurious indentation or newline
+tokens.
+
+Now we're ready for the lexicon definition. Having defined all our patterns and
+action procedures, it's fairly straightforward.
+
+::
+
+    lexicon = Lexicon([
+        (name,            'name'),
+        (number,          'number'),
+        (stringlit,       'string'),
+        (punctuation,     TEXT),
+        (opening_bracket, open_bracket_action),
+        (closing_bracket, close_bracket_action),
+        (lineterm,        newline_action),
+        (comment,         IGNORE),
+        (spaces,          IGNORE),
+        (escaped_newline, IGNORE),
+        State('indent', [
+            (blank_line,    IGNORE),
+            (indentation,   indentation_action),
+        ]),
+    ])
+
+Finally, we need to initialise the indentation stack and bracket counter, and
+set the initial state to 'indent' before starting.
+
+::
+
+    def __init__(self, file):
+        Scanner.__init__(self, self.lexicon, file)
+        self.indentation_stack = [0]
+        self.bracket_nesting_level = 0
+        self.begin('indent')
+
+And we're done. That wasn't too hard now, was it ?
+
+Traditional regular expression syntax
+=====================================
+
+If you're one of those diehards that prefers to write regular expressions using
+the traditional cryptic character-string syntax, the plex.Traditional submodule
+provides what you want. For example,
+
+::
+
+    from plex.Traditional import re
+
+    ident = re("[A-Za-z_][A-Za-z0-9_]*")
+
+
+See the Reference section for the precise details of the syntax.
+
+
+That's All, Folks
+=================
+
+We have now touched on all the main features of Plex; for the fine details, see the Reference section. Good luck and happy Plexing!

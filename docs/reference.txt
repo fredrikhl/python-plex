@@ -1,0 +1,276 @@
+==============
+Plex Reference
+==============
+
+Class Lexicon
+=============
+
+A Lexicon instance embodies a collection of lexical token definitions for use by
+a Scanner. Once constructed, a single Lexicon can be used by many Scanners.
+
+Constructor
+-----------
+
+Lexicon(specification) builds a lexical analyser from the given specification. The specification consists of a list of specification items. Each specification item may be one of:
+
+1. A token definition, which is a tuple:
+
+   ::
+
+        (pattern, action)
+
+   where pattern is a regular axpression built using the Plex pattern
+   constructors, and action is the action to be performed when this pattern is
+   recognised. Pattern constructors and actions are defined below.
+
+2. A state definition:
+
+   ::
+
+        State(name, tokens)
+
+   where nameis a character string naming the state, and tokens is a list of
+   token definitions as above. The meaning and usage of states is described
+   below.
+
+
+Patterns
+--------
+
+Plex patterns are built using the following constructors.
+
+    Str(s)
+        Matches the literal string s.
+
+    Str(s1,s2, ...)
+        Matches either the string s1 or s2 or ...
+
+        Equivalent to Alt(Str(s1),Str(s2),...).
+
+    Any(s)
+        Matches any single character in the string s.
+
+    AnyBut(s)
+        Matches any single character (including newline) which is not in the
+        string s.
+
+    AnyChar
+        Matches any single character (including newline). Equivalent to
+        AnyBut('').
+
+    Empty
+        Matches the empty string.
+
+    p1 + p2
+        Matches the pattern p1 followed by p2. Equivalent to Seq(p1, p2).
+
+    p1 | p2
+        Matches either the pattern p1 or p2. Equivalent to Alt(p1, p2).
+
+    Seq(p1, p2, ...)
+        Matches the pattern p1 followed by p2 followed by ...
+
+    Alt(p1, p2, ...)
+        Matches either the pattern p1 or p2 or ...
+
+    Opt(p)
+        Matches either the pattern p or the empty string. Equivalent to p |
+        Empty.
+
+    Rep(p)
+        Matches zero or more repetitions of the pattern p.
+
+    Rep1(p)
+        Matches one or more repetitions of the pattern p.
+
+    NoCase(p)
+        Matches the same strings as the pattern p, except that, in any part of p
+        not enclosed by a Case(), upper and lower case letters are treated as
+        equivalent.
+
+    Case(p)
+        Matches the same strings as the pattern p, except that, in any part of p
+        not enclosed by a NoCase(), upper and lower case letters are treated as
+        distinct.
+
+    Bol
+        Matches an imaginary character at the beginning of a line (i.e. at the
+        start of the file or just after a newline).
+
+    Eol
+        Matches an imaginary character at the end of a line (i.e. just before a
+        newline or at the end of the file).
+
+    Eof
+        Matches an imaginary character at the end of the file.
+
+Note: The patterns Bol, Eol and Eof will only match once at any given position.
+
+
+Actions
+-------
+
+The action in a token specifation may be one of three things:
+
+1. A function, which is called as follows:
+
+   ::
+
+        function(scanner, text)
+
+   where scanner is the relevant Scanner instance, and text is the matched text.
+   If the function returns anything other than None, that value is returned as
+   the value of the token. If it returns None, scanning continues as if the
+   IGNORE action were specified (see below).
+
+2. One of the following special actions:
+
+    IGNORE
+        The recognised characters will be treated as white space and ignored.
+        Scanning will continue until the next non-ignoredtoken is recognised
+        before returning.
+        
+    TEXT
+        Causes the scanned text itself to be returned as the value of the token.
+        
+    Begin(state)
+        Causes the Scanner to enter the state named state(see below). Any other
+        value, which is returned as the value of the token.
+
+3. Any other value, which is returned as the value of the token.
+
+
+States
+------
+
+At any given time, the scanner is in one of a number of states. Associated with
+each state is a set of possible tokens. When scanning, only tokens associated
+with the current state are recognised.
+
+There is a default state, whose name is the empty string. Token definitions
+which are not inside any State definition belong to the default state.
+
+The initial state of the scanner is the default state. The state can be changed
+by :
+
+1. Using Begin(state_name) as the action of a token.
+
+2. Calling the begin(state_name) method of the Scanner.
+
+To change back to the default state, use '' as the state name.
+
+
+Class Scanner
+=============
+
+A Scanner instance associates a Lexicon with a stream of characters and provides
+a means of reading tokens from the stream.
+
+Constructor
+-----------
+
+    Scanner(lexicon, stream[, name = ''])
+
+        lexicon
+            A Lexicon instance. 
+                  
+        stream
+            A file object or any object with a compatible read() method.
+            
+        name
+            A name identifying the stream being scanned. This argument is
+            optional; its only use is to be returned by the position() method.
+
+Methods
+-------
+
+    read() --> (value, text)
+
+        Reads the next lexical token from the stream and returns a tuple (value,
+        text), where value is the value associated with the token as specified
+        by the Lexicon, and text is the actual string read from the stream.
+        Returns (None, '') on end of file.
+
+    position() --> (name, line, col)
+
+        Returns a tuple (name,line,col) representing the location of the last
+        token read using the read() method. name is the name that was provided
+        to the Scanner constructor; line is the line number in the stream
+        (1-based); col is the position within the line of the first character of
+        the token (0-based).
+
+    begin(state_name)
+
+        Sets the current state of the Scanner to the state named state_name.
+
+    produce(value [, text])
+
+        Called from an action procedure, causes value to be returned as the
+        token value from the current call to read(). If text is supplied, it is
+        returned in place of the scanned text.
+
+        produce() can be called more than once during a single call to an action
+        procedure. In this case, scanning is suspended and tokens are queued and
+        returned one at a time by subsequent calls to read(). When the queue is
+        empty, scanning resumes.
+
+    eof()
+
+        This method can be overridden to perform an action when the end of the
+        input stream is encountered. The default implementation does nothing.
+
+
+Module ``plex.Traditional``
+===========================
+
+The Traditional submodule provides support for writing regular expressions using
+a more traditional character-string syntax.
+
+    re(s)
+
+        Returns a pattern  constructed from the traditional regular expression
+        string s. The syntax of s is made up of the following elements, where c is a
+        character and a and b are regular expressions :
+             
+        c
+            where c is not one of the special characters below, matches the character c. 
+            
+        .
+            matches any single character, except a newline.
+                        
+        ^
+            matches the beginning of a line.
+        
+        $
+            matches the end of a line.
+                        
+        \c
+            matches the character c, even if c is a special character.
+        
+        a*
+            matches 0 or more repetitions of a. 
+        
+        a+
+            matches 1 or more repetitions of a.
+        
+        a?
+            matches an optional a.
+
+        ab
+            matches a followed by b. 
+                        
+        a|b
+            matches either a or b. 
+                        
+        (a)
+            matches a. 
+                        
+        [set]
+            matches any one of the characters in set. The elements of set are
+            either a single character, or a range (a pair of characters
+            separated by a hyphen). A hyphen at the beginning or end of the set,
+            or a right square bracket at the beginning of the set, are not
+            treated specially. The first character of set may not be a caret.
+                        
+        [^set]
+                matches any single character (including newline) which is not in set.
