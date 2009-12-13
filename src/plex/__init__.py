@@ -27,7 +27,7 @@ see the attached docstrings for more information.
                     creating a Lexicon.
 """
 
-__version__ = '1.2.0'
+__version__ = '2.0.0'
 
 from plex.actions import TEXT, IGNORE, Begin
 from plex.lexicons import Lexicon, State
