@@ -1,15 +1,16 @@
 Changes
 =======
 
-2.0.0 (2009-12-09)
+2.0.0 (2009-12-13)
 ------------------
 
 * Create a Plex python package
 * Convert documentation to Sphinx
+* Convert tests to nose
 * Format the source code with PEP8 recommendations
 
     * 4 spaces indentation
-    * convert packages and modules names to lowers cases
+    * convert package and modules names to lowers cases
 
 
 1.1.5
