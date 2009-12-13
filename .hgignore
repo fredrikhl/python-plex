@@ -9,3 +9,4 @@ src/Plex.egg-info/
 dist
 env1
 src/plex.egg-info/
+pip-log.txt

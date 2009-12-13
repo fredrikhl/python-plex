@@ -9,8 +9,8 @@ Changes
 * Convert tests to nose
 * Format the source code with PEP8 recommendations
 
-    * 4 spaces indentation
-    * convert package and modules names to lowers cases
+  * 4 spaces indentation
+  * convert package and modules names to lowers cases
 
 
 1.1.5

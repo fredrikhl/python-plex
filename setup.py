@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from setuptools import setup, find_packages
 import sys, os
 import re
@@ -22,8 +23,11 @@ setup(name='plex',
       keywords='',
       author='Greg Ewing',
       author_email='greg@cosc.canterbury.ac.nz',
+      maintainer= 'Stephane Klein',
+      maintainer_email= 'stephane@harobed.org',
       url='http://www.cosc.canterbury.ac.nz/greg.ewing/python/Plex/',
-      license='',
+
+      license='LGPL',
       packages=find_packages('src'),
       package_dir = {'': 'src'},include_package_data=True,
       zip_safe=False,

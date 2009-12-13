@@ -27,16 +27,10 @@ number or complexity of the regular expressions. Python's existing regular
 expression matchers do not have this property.
 
 
-License
-=======
-
-Plex is free of any restrictions. You can use it, redistribute it, sell
-it, whatever you want. All I ask is that you give me credit if you
-distribute any code derived from it.
-
-
 Contact
 =======
+
+Original author :
 
 | Greg Ewing <greg@cosc.canterbury.ac.nz>,
 | Computer Science Department,
@@ -44,3 +38,4 @@ Contact
 | Christchurch,
 | New Zealand
 
+Maintainer : Stephane Klein <stephane@harobed.org>
